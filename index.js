@@ -15,7 +15,7 @@ const {
 const ROLE_AAA = '1518678337839431971'; // Asymmetric Alpha Alerts
 const ROLE_BRA = '1518679378916278432'; // Breakout Resource Alerts
 
-// Inicializar cliente de Google Sheets con el archivo JSON
+// Inicializar cliente de Google Sheets con el archivo JSON nuevo
 const auth = new google.auth.GoogleAuth({
     keyFile: './offboarding-service-502720-b08da5c484e5.json',
     scopes: ['https://www.googleapis.com/auth/spreadsheets']
@@ -59,15 +59,19 @@ async function removeDiscordRole(discordUserId, roleId, roleName) {
     }
 }
 
-async function updateSheetStatus(rowNumber) {
+// NUEVA FUNCIÓN: Actualiza Status (D), AAA (E) y BRA (F) al mismo tiempo
+async function updateSheetData(rowNumber, status, hasAAA, hasBRA) {
     try {
+        const aaaText = hasAAA ? 'Yes' : 'No';
+        const braText = hasBRA ? 'Yes' : 'No';
+
         await sheets.spreadsheets.values.update({
             spreadsheetId: SPREADSHEET_ID,
-            range: `Source of Truth!D${rowNumber}`,
+            range: `Source of Truth!D${rowNumber}:F${rowNumber}`, // Abarca las 3 columnas
             valueInputOption: 'USER_ENTERED',
-            requestBody: { values: [['Inactive']] }
+            requestBody: { values: [[status, aaaText, braText]] }
         });
-        console.log(`✅ Fila ${rowNumber} actualizada a 'Inactive' en Sheets.`);
+        console.log(`✅ Fila ${rowNumber} actualizada en Sheets -> Status: ${status}, AAA: ${aaaText}, BRA: ${braText}`);
     } catch (error) {
         console.error(`❌ Error actualizando Sheets en fila ${rowNumber}:`, error.message);
     }
@@ -79,13 +83,12 @@ async function updateSheetStatus(rowNumber) {
 async function runOffboardingWorker() {
     console.log('🚀 Iniciando script de Offboarding...\n');
 
-    // Aquí guardaremos el reporte de los usuarios modificados
     const removedRolesSummary = [];
 
     try {
         const response = await sheets.spreadsheets.values.get({
             spreadsheetId: SPREADSHEET_ID,
-            range: 'Source of Truth!A:D',
+            range: 'Source of Truth!A:D', // Sigue leyendo hasta la D para saber si está Active
         });
 
         const rows = response.data.values;
@@ -111,7 +114,6 @@ async function runOffboardingWorker() {
                 }
 
                 const courses = teachableData.courses || [];
-
                 const activeCourses = courses
                     .filter(course => course.is_active_enrollment === true)
                     .map(course => course.course_name.toLowerCase());
@@ -135,21 +137,19 @@ async function runOffboardingWorker() {
                     statusChanged = true;
                 }
 
-                if (statusChanged && !hasAAA && !hasBRA) {
+                // Actualizar las columnas si hubo un cambio
+                if (statusChanged) {
+                    const finalStatus = (!hasAAA && !hasBRA) ? 'Inactive' : 'Active';
                     const excelRowNumber = i + 1;
-                    await updateSheetStatus(excelRowNumber);
+                    await updateSheetData(excelRowNumber, finalStatus, hasAAA, hasBRA);
                 }
 
-                console.log('---'); // Separador visual en consola
+                console.log('---');
                 await new Promise(resolve => setTimeout(resolve, 1000));
             }
         }
 
-        // ==========================================
-        // REPORTE FINAL
-        // ==========================================
         console.log('\n🏁 Script de Offboarding finalizado.');
-
         if (removedRolesSummary.length > 0) {
             console.log('\n📊 RESUMEN DE ROLES REMOVIDOS EN ESTA SESIÓN:');
             console.table(removedRolesSummary);
@@ -162,5 +162,4 @@ async function runOffboardingWorker() {
     }
 }
 
-// Ejecutar el script
 runOffboardingWorker();
