@@ -17,7 +17,7 @@ const ROLE_BRA = '1518679378916278432'; // Breakout Resource Alerts
 
 // Inicializar cliente de Google Sheets con el archivo JSON
 const auth = new google.auth.GoogleAuth({
-    keyFile: './offboarding-service-502720-0a8eec578417.json',
+    keyFile: './offboarding-service-502720-b08da5c484e5.json',
     scopes: ['https://www.googleapis.com/auth/spreadsheets']
 });
 const sheets = google.sheets({ version: 'v4', auth });
@@ -32,15 +32,15 @@ async function getTeachableUser(email) {
             headers: { 'Accept': 'application/json', 'apikey': TEACHABLE_API_KEY },
             params: { email: email }
         });
-        
+
         const users = searchResponse.data.users || [];
         if (users.length === 0) return null;
-        
+
         const studentId = users[0].id;
         const userDetails = await axios.get(`https://developers.teachable.com/v1/users/${studentId}`, {
             headers: { 'Accept': 'application/json', 'apikey': TEACHABLE_API_KEY }
         });
-        
+
         return userDetails.data;
     } catch (error) {
         console.error(`❌ Error buscando en Teachable el email ${email}:`, error.message);
@@ -96,22 +96,22 @@ async function runOffboardingWorker() {
 
         for (let i = 1; i < rows.length; i++) {
             const row = rows[i];
-            const email = row[0];            
-            const discordUserId = row[1];    
-            const status = row[3];           
+            const email = row[0];
+            const discordUserId = row[1];
+            const status = row[3];
 
             if (status === 'Active' && email && discordUserId) {
                 console.log(`🔍 Evaluando usuario: ${email}`);
-                
+
                 const teachableData = await getTeachableUser(email);
-                
+
                 if (!teachableData) {
                     console.log(`⚠️ Usuario ${email} no encontrado en Teachable. Saltando...\n`);
                     continue;
                 }
 
                 const courses = teachableData.courses || [];
-                
+
                 const activeCourses = courses
                     .filter(course => course.is_active_enrollment === true)
                     .map(course => course.course_name.toLowerCase());
@@ -136,20 +136,20 @@ async function runOffboardingWorker() {
                 }
 
                 if (statusChanged && !hasAAA && !hasBRA) {
-                    const excelRowNumber = i + 1; 
+                    const excelRowNumber = i + 1;
                     await updateSheetStatus(excelRowNumber);
                 }
-                
+
                 console.log('---'); // Separador visual en consola
                 await new Promise(resolve => setTimeout(resolve, 1000));
             }
         }
-        
+
         // ==========================================
         // REPORTE FINAL
         // ==========================================
         console.log('\n🏁 Script de Offboarding finalizado.');
-        
+
         if (removedRolesSummary.length > 0) {
             console.log('\n📊 RESUMEN DE ROLES REMOVIDOS EN ESTA SESIÓN:');
             console.table(removedRolesSummary);
