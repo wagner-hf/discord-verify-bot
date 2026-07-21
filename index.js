@@ -15,9 +15,12 @@ const {
 const ROLE_AAA = '1518678337839431971'; // Asymmetric Alpha Alerts
 const ROLE_BRA = '1518679378916278432'; // Breakout Resource Alerts
 
-// Inicializar cliente de Google Sheets con el archivo JSON nuevo
+// Inicializar cliente de Google Sheets para Heroku
 const auth = new google.auth.GoogleAuth({
-    keyFile: './offboarding-service-502720-b08da5c484e5.json',
+    credentials: {
+        client_email: process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL,
+        private_key: process.env.GOOGLE_PRIVATE_KEY.replace(/\\n/g, '\n'),
+    },
     scopes: ['https://www.googleapis.com/auth/spreadsheets']
 });
 const sheets = google.sheets({ version: 'v4', auth });
