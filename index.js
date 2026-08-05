@@ -14,6 +14,8 @@ const {
 
 const ROLE_AAA = '1518678337839431971'; // Asymmetric Alpha Alerts
 const ROLE_BRA = '1518679378916278432'; // Breakout Resource Alerts
+const ROLE_SSA = '1534634750101160096'; // Special Situations Alerts
+const ROLE_TCA = '1534634874500153415'; // Tactical Cashflow Alerts
 
 // Inicializar cliente de Google Sheets para Heroku
 const auth = new google.auth.GoogleAuth({
@@ -62,19 +64,21 @@ async function removeDiscordRole(discordUserId, roleId, roleName) {
     }
 }
 
-// NUEVA FUNCIÓN: Actualiza Status (D), AAA (E) y BRA (F) al mismo tiempo
-async function updateSheetData(rowNumber, status, hasAAA, hasBRA) {
+// ACTUALIZADO: Actualiza Status (D), AAA (E), BRA (F), SSA (G) y TCA (H) al mismo tiempo
+async function updateSheetData(rowNumber, status, hasAAA, hasBRA, hasSSA, hasTCA) {
     try {
         const aaaText = hasAAA ? 'Yes' : 'No';
         const braText = hasBRA ? 'Yes' : 'No';
+        const ssaText = hasSSA ? 'Yes' : 'No';
+        const tcaText = hasTCA ? 'Yes' : 'No';
 
         await sheets.spreadsheets.values.update({
             spreadsheetId: SPREADSHEET_ID,
-            range: `Source of Truth!D${rowNumber}:F${rowNumber}`, // Abarca las 3 columnas
+            range: `Source of Truth!D${rowNumber}:H${rowNumber}`, // Abarca de la D a la H (5 columnas)
             valueInputOption: 'USER_ENTERED',
-            requestBody: { values: [[status, aaaText, braText]] }
+            requestBody: { values: [[status, aaaText, braText, ssaText, tcaText]] }
         });
-        console.log(`✅ Fila ${rowNumber} actualizada en Sheets -> Status: ${status}, AAA: ${aaaText}, BRA: ${braText}`);
+        console.log(`✅ Fila ${rowNumber} actualizada -> Status: ${status}, AAA: ${aaaText}, BRA: ${braText}, SSA: ${ssaText}, TCA: ${tcaText}`);
     } catch (error) {
         console.error(`❌ Error actualizando Sheets en fila ${rowNumber}:`, error.message);
     }
@@ -91,7 +95,7 @@ async function runOffboardingWorker() {
     try {
         const response = await sheets.spreadsheets.values.get({
             spreadsheetId: SPREADSHEET_ID,
-            range: 'Source of Truth!A:D', // Sigue leyendo hasta la D para saber si está Active
+            range: 'Source of Truth!A:H', // Leemos hasta la H
         });
 
         const rows = response.data.values;
@@ -123,28 +127,45 @@ async function runOffboardingWorker() {
 
                 const hasAAA = activeCourses.some(name => name.includes('asymmetric alpha'));
                 const hasBRA = activeCourses.some(name => name.includes('breakout resource'));
+                const hasSSA = activeCourses.some(name => name.includes('special situations'));
+                const hasTCA = activeCourses.some(name => name.includes('tactical cashflow'));
 
                 let statusChanged = false;
 
-                // Path A
+                // Path A: Asymmetric Alpha Alerts
                 if (!hasAAA) {
                     await removeDiscordRole(discordUserId, ROLE_AAA, 'Asymmetric Alpha Alerts');
                     removedRolesSummary.push({ Correo: email, Rol_Removido: 'Asymmetric Alpha Alerts' });
                     statusChanged = true;
                 }
 
-                // Path B
+                // Path B: Breakout Resource Alerts
                 if (!hasBRA) {
                     await removeDiscordRole(discordUserId, ROLE_BRA, 'Breakout Resource Alerts');
                     removedRolesSummary.push({ Correo: email, Rol_Removido: 'Breakout Resource Alerts' });
                     statusChanged = true;
                 }
 
+                // Path C: Special Situations Alerts
+                if (!hasSSA) {
+                    await removeDiscordRole(discordUserId, ROLE_SSA, 'Special Situations Alerts');
+                    removedRolesSummary.push({ Correo: email, Rol_Removido: 'Special Situations Alerts' });
+                    statusChanged = true;
+                }
+
+                // Path D: Tactical Cashflow Alerts
+                if (!hasTCA) {
+                    await removeDiscordRole(discordUserId, ROLE_TCA, 'Tactical Cashflow Alerts');
+                    removedRolesSummary.push({ Correo: email, Rol_Removido: 'Tactical Cashflow Alerts' });
+                    statusChanged = true;
+                }
+
                 // Actualizar las columnas si hubo un cambio
                 if (statusChanged) {
-                    const finalStatus = (!hasAAA && !hasBRA) ? 'Inactive' : 'Active';
+                    // Solo es 'Inactive' si NO tiene ninguna de las 4 membresías activas
+                    const finalStatus = (!hasAAA && !hasBRA && !hasSSA && !hasTCA) ? 'Inactive' : 'Active';
                     const excelRowNumber = i + 1;
-                    await updateSheetData(excelRowNumber, finalStatus, hasAAA, hasBRA);
+                    await updateSheetData(excelRowNumber, finalStatus, hasAAA, hasBRA, hasSSA, hasTCA);
                 }
 
                 console.log('---');
