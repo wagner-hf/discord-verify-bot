@@ -16,6 +16,9 @@ const ROLE_AAA = '1518678337839431971'; // Asymmetric Alpha Alerts
 const ROLE_BRA = '1518679378916278432'; // Breakout Resource Alerts
 const ROLE_SSA = '1534634750101160096'; // Special Situations Alerts
 const ROLE_TCA = '1534634874500153415'; // Tactical Cashflow Alerts
+const ROLE_TYS = '1540103931563090031'; // Total Yield Stocks
+const ROLE_UGS = '1540104212178796626'; // Ultra Growth Stocks
+const ROLE_PWC = '1540104362636869733'; // Private Wealth Club
 
 // Inicializar cliente de Google Sheets para Heroku
 const auth = new google.auth.GoogleAuth({
@@ -64,21 +67,24 @@ async function removeDiscordRole(discordUserId, roleId, roleName) {
     }
 }
 
-// ACTUALIZADO: Actualiza Status (D), AAA (E), BRA (F), SSA (G) y TCA (H) al mismo tiempo
-async function updateSheetData(rowNumber, status, hasAAA, hasBRA, hasSSA, hasTCA) {
+// ACTUALIZADO: Actualiza Status (D) hasta PWC (K) al mismo tiempo
+async function updateSheetData(rowNumber, status, hasAAA, hasBRA, hasSSA, hasTCA, hasTYS, hasUGS, hasPWC) {
     try {
         const aaaText = hasAAA ? 'Yes' : 'No';
         const braText = hasBRA ? 'Yes' : 'No';
         const ssaText = hasSSA ? 'Yes' : 'No';
         const tcaText = hasTCA ? 'Yes' : 'No';
+        const tysText = hasTYS ? 'Yes' : 'No';
+        const ugsText = hasUGS ? 'Yes' : 'No';
+        const pwcText = hasPWC ? 'Yes' : 'No';
 
         await sheets.spreadsheets.values.update({
             spreadsheetId: SPREADSHEET_ID,
-            range: `Source of Truth!D${rowNumber}:H${rowNumber}`, // Abarca de la D a la H (5 columnas)
+            range: `Source of Truth!D${rowNumber}:K${rowNumber}`, // Abarca de la D a la K (8 columnas)
             valueInputOption: 'USER_ENTERED',
-            requestBody: { values: [[status, aaaText, braText, ssaText, tcaText]] }
+            requestBody: { values: [[status, aaaText, braText, ssaText, tcaText, tysText, ugsText, pwcText]] }
         });
-        console.log(`✅ Fila ${rowNumber} actualizada -> Status: ${status}, AAA: ${aaaText}, BRA: ${braText}, SSA: ${ssaText}, TCA: ${tcaText}`);
+        console.log(`✅ Fila ${rowNumber} actualizada -> Status: ${status}, AAA: ${aaaText}, BRA: ${braText}, SSA: ${ssaText}, TCA: ${tcaText}, TYS: ${tysText}, UGS: ${ugsText}, PWC: ${pwcText}`);
     } catch (error) {
         console.error(`❌ Error actualizando Sheets en fila ${rowNumber}:`, error.message);
     }
@@ -95,7 +101,7 @@ async function runOffboardingWorker() {
     try {
         const response = await sheets.spreadsheets.values.get({
             spreadsheetId: SPREADSHEET_ID,
-            range: 'Source of Truth!A:H', // Leemos hasta la H
+            range: 'Source of Truth!A:K', // Leemos hasta la K para incluir todas las estrategias
         });
 
         const rows = response.data.values;
@@ -129,6 +135,9 @@ async function runOffboardingWorker() {
                 const hasBRA = activeCourses.some(name => name.includes('breakout resource'));
                 const hasSSA = activeCourses.some(name => name.includes('special situations'));
                 const hasTCA = activeCourses.some(name => name.includes('tactical cashflow'));
+                const hasTYS = activeCourses.some(name => name.includes('total yield'));
+                const hasUGS = activeCourses.some(name => name.includes('ultra growth'));
+                const hasPWC = activeCourses.some(name => name.includes('private wealth'));
 
                 let statusChanged = false;
 
@@ -160,12 +169,33 @@ async function runOffboardingWorker() {
                     statusChanged = true;
                 }
 
+                // Path E: Total Yield Stocks
+                if (!hasTYS) {
+                    await removeDiscordRole(discordUserId, ROLE_TYS, 'Total Yield Stocks');
+                    removedRolesSummary.push({ Correo: email, Rol_Removido: 'Total Yield Stocks' });
+                    statusChanged = true;
+                }
+
+                // Path F: Ultra Growth Stocks
+                if (!hasUGS) {
+                    await removeDiscordRole(discordUserId, ROLE_UGS, 'Ultra Growth Stocks');
+                    removedRolesSummary.push({ Correo: email, Rol_Removido: 'Ultra Growth Stocks' });
+                    statusChanged = true;
+                }
+
+                // Path G: Private Wealth Club
+                if (!hasPWC) {
+                    await removeDiscordRole(discordUserId, ROLE_PWC, 'Private Wealth Club');
+                    removedRolesSummary.push({ Correo: email, Rol_Removido: 'Private Wealth Club' });
+                    statusChanged = true;
+                }
+
                 // Actualizar las columnas si hubo un cambio
                 if (statusChanged) {
-                    // Solo es 'Inactive' si NO tiene ninguna de las 4 membresías activas
-                    const finalStatus = (!hasAAA && !hasBRA && !hasSSA && !hasTCA) ? 'Inactive' : 'Active';
+                    // Solo es 'Inactive' si NO tiene ninguna de las 7 membresías activas
+                    const finalStatus = (!hasAAA && !hasBRA && !hasSSA && !hasTCA && !hasTYS && !hasUGS && !hasPWC) ? 'Inactive' : 'Active';
                     const excelRowNumber = i + 1;
-                    await updateSheetData(excelRowNumber, finalStatus, hasAAA, hasBRA, hasSSA, hasTCA);
+                    await updateSheetData(excelRowNumber, finalStatus, hasAAA, hasBRA, hasSSA, hasTCA, hasTYS, hasUGS, hasPWC);
                 }
 
                 console.log('---');
